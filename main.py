@@ -1,4 +1,4 @@
-from image_loader import load_dataset, feature_extraction, extract_hog_features
+from image_loader import load_dataset, feature_extraction, extract_combined_features
 import pandas as pd
 import numpy as np
 from sklearn.svm import SVC
