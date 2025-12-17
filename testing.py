@@ -1,7 +1,7 @@
 import cv2
 import joblib
 from sklearn.preprocessing import LabelEncoder
-from image_loader import load_dataset, feature_extraction, extract_hog_features
+from image_loader import load_dataset, feature_extraction, extract_combined_features
 import numpy as np
 
 classifications = ["cardboard", "glass", "metal", "paper", "plastic", "trash", "unknown"]
@@ -29,7 +29,7 @@ loaded_scaler = joblib.load("saved_scaler.joblib")
 
 while True:
     img = cv2.imread(input("Enter Image Path: "))
-    features = extract_hog_features(img)
+    features = extract_combined_features(img)
     features_scaled = loaded_scaler.transform(np.reshape(features, (1, -1)))
     prediction, prediction_probability = predict_with_unknown(loaded_svm_model, features_scaled, 0.6)
     print(prediction_probability, le.inverse_transform(prediction)[0])
