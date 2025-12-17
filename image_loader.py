@@ -2,7 +2,7 @@ import cv2
 import pandas as pd
 import os
 import numpy as np
-from skimage.feature import hog
+from skimage.feature import hog, local_binary_pattern
 from skimage import color
 
 ## Data Augmentation Functions
@@ -149,7 +149,7 @@ def load_dataset(path, classifications, target_per_class=500):
         
         # Add original images to dataset
         for img in original_images:
-            features = extract_hog_features(img)
+            features = extract_combined_features(img)
             new_row = [False, features, classification]
             data.append(new_row)
         
@@ -171,7 +171,7 @@ def load_dataset(path, classifications, target_per_class=500):
                     aug_type = np.random.choice(augmentation_techniques)
                     augmented_img = augment_image(img, aug_type)
                     
-                    features = extract_hog_features(augmented_img)
+                    features = extract_combined_features(augmented_img)
                     new_row = [True, features, classification]
                     data.append(new_row)
                     augmented_count += 1
@@ -197,23 +197,109 @@ def feature_extraction(image):
     ## Preprocess the features (multiple preprocessing techniques)
     features = features / 255
     return features
+
+def extract_color_histogram(image, bins=32):
+    """Extract color histogram features from HSV color space"""
+    # Convert to HSV for better color representation
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    
+    # Calculate histogram for each channel
+    hist_h = cv2.calcHist([hsv], [0], None, [bins], [0, 180])
+    hist_s = cv2.calcHist([hsv], [1], None, [bins], [0, 256])
+    hist_v = cv2.calcHist([hsv], [2], None, [bins], [0, 256])
+    
+    # Normalize histograms
+    hist_h = cv2.normalize(hist_h, hist_h).flatten()
+    hist_s = cv2.normalize(hist_s, hist_s).flatten()
+    hist_v = cv2.normalize(hist_v, hist_v).flatten()
+    
+    return np.concatenate([hist_h, hist_s, hist_v])
+
+def extract_lbp_features(image, radius=3, n_points=24):
+    """Extract Local Binary Pattern texture features"""
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Apply LBP
+    lbp = local_binary_pattern(gray, n_points, radius, method='uniform')
+    
+    # Calculate histogram of LBP
+    n_bins = n_points + 2
+    hist, _ = np.histogram(lbp.ravel(), bins=n_bins, range=(0, n_bins), density=True)
+    
+    return hist
+
+def extract_edge_features(image):
+    """Extract edge density features using Canny edge detection"""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    # Apply Canny edge detection
+    edges = cv2.Canny(gray, 50, 150)
+    
+    # Calculate edge density (percentage of edge pixels)
+    edge_density = np.sum(edges > 0) / edges.size
+    
+    # Divide image into 4 quadrants and calculate edge density for each
+    h, w = edges.shape
+    quadrants = [
+        edges[0:h//2, 0:w//2],
+        edges[0:h//2, w//2:w],
+        edges[h//2:h, 0:w//2],
+        edges[h//2:h, w//2:w]
+    ]
+    
+    quadrant_densities = [np.sum(q > 0) / q.size for q in quadrants]
+    
+    return np.array([edge_density] + quadrant_densities)
+
 def extract_hog_features(image, resize_dim=(256, 256), pixels_per_cell=(16, 16), cells_per_block=(2, 2), orientations=12):
-    # Step 1: Resize the image to a larger fixed size for better feature extraction
+    """Extract HOG features with optimized parameters"""
+    # Step 1: Resize the image
     image_resized = cv2.resize(image, resize_dim)
     
-    # Step 2: Convert to grayscale
-    image_gray = cv2.cvtColor(image_resized, cv2.COLOR_BGR2GRAY)
+    # Step 2: Denoise the image
+    image_denoised = cv2.fastNlMeansDenoisingColored(image_resized, None, 10, 10, 7, 21)
     
-    # Step 3: Apply histogram equalization for better contrast
-    image_gray = cv2.equalizeHist(image_gray)
+    # Step 3: Convert to grayscale
+    image_gray = cv2.cvtColor(image_denoised, cv2.COLOR_BGR2GRAY)
     
-    # Step 4: Compute HOG features with improved parameters
-    features, hog_image = hog(image_gray, orientations=orientations,
-                              pixels_per_cell=pixels_per_cell,
-                              cells_per_block=cells_per_block,
-                              visualize=True,
-                              feature_vector=True,
-                              block_norm='L2-Hys')
+    # Step 4: Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    image_gray = clahe.apply(image_gray)
     
-    # Step 5: Return the fixed-length feature vector
+    # Step 5: Compute HOG features
+    features = hog(image_gray, orientations=orientations,
+                   pixels_per_cell=pixels_per_cell,
+                   cells_per_block=cells_per_block,
+                   visualize=False,
+                   feature_vector=True,
+                   block_norm='L2-Hys')
+    
     return features
+
+def extract_combined_features(image):
+    """
+    Extract and combine multiple feature types for robust classification:
+    - HOG features (shape and gradient information)
+    - Color histogram features (color distribution)
+    - LBP features (texture information)
+    - Edge features (structural information)
+    """
+    # Resize image to standard size for consistency
+    image_resized = cv2.resize(image, (256, 256))
+    
+    # Extract different feature types
+    hog_features = extract_hog_features(image_resized)
+    color_features = extract_color_histogram(image_resized, bins=32)
+    lbp_features = extract_lbp_features(image_resized, radius=3, n_points=24)
+    edge_features = extract_edge_features(image_resized)
+    
+    # Combine all features into a single feature vector
+    combined_features = np.concatenate([
+        hog_features,      # Shape and gradient information
+        color_features,    # Color distribution
+        lbp_features,      # Texture information
+        edge_features      # Edge density information
+    ])
+    
+    return combined_features
