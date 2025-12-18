@@ -1,7 +1,8 @@
 import cv2
 import joblib
 from sklearn.preprocessing import LabelEncoder
-from image_loader import load_dataset, feature_extraction, extract_hog_features
+from image_loader2 import load_dataset, feature_extraction, extract_hog_features, extract_combined_features
+from image_loader2 import extract_pure_cnn_features
 import numpy as np
 
 classifications = ["cardboard", "glass", "metal", "paper", "plastic", "trash", "unknown"]
@@ -30,7 +31,7 @@ while True:
         print("Failed to grab frame.")
         break
 
-    features = extract_hog_features(frame)
+    features = extract_pure_cnn_features(frame)
     features_scaled = loaded_scaler.transform(np.reshape(features, (1, -1)))
 
     # Make prediction using the model

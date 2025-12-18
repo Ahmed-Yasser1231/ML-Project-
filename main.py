@@ -1,4 +1,5 @@
-from image_loader import load_dataset, feature_extraction, extract_combined_features
+from image_loader2 import load_dataset, feature_extraction, extract_combined_features
+from image_loader2 import extract_pure_cnn_features
 import pandas as pd
 import numpy as np
 from sklearn.svm import SVC
@@ -50,8 +51,8 @@ param_grid = {
     'kernel': ['rbf', 'poly']
 }
 
-svm_model = GridSearchCV(SVC(probability=True, random_state=42, class_weight='balanced'), 
-                            param_grid, cv=5, scoring='accuracy', n_jobs=-1, verbose=2)
+svm_model = GridSearchCV(SVC(probability=True, random_state=42, class_weight='balanced'),
+                            param_grid, cv=2, scoring='accuracy', n_jobs=-1, verbose=2)
 
 # knn_model = KNeighborsClassifier()
 ## Use cross validation on the current model and data (multiple ways)
