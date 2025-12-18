@@ -4,6 +4,31 @@ import os
 import numpy as np
 from skimage.feature import hog, local_binary_pattern
 from skimage import color
+import tensorflow as tf
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+
+# Global CNN model for feature extraction (loaded once to avoid reloading)
+_cnn_model = None
+
+def get_cnn_feature_extractor():
+    """Load and cache pre-trained MobileNetV2 model for feature extraction"""
+    global _cnn_model
+    if _cnn_model is None:
+        print("Loading pre-trained MobileNetV2 model...")
+        # Load MobileNetV2 pre-trained on ImageNet
+        # include_top=False removes the final classification layer
+        # pooling='avg' adds global average pooling to get fixed-size features
+        base_model = MobileNetV2(
+            weights='imagenet',
+            include_top=False,
+            pooling='avg',
+            input_shape=(224, 224, 3)
+        )
+        base_model.trainable = False  # Freeze weights for feature extraction
+        _cnn_model = base_model
+        print("MobileNetV2 model loaded successfully!")
+    return _cnn_model
 
 ## Data Augmentation Functions
 def rotate_image(image, angle):
@@ -149,7 +174,7 @@ def load_dataset(path, classifications, target_per_class=500):
         
         # Add original images to dataset
         for img in original_images:
-            features = extract_combined_features(img)
+            features = extract_pure_cnn_features(img)
             new_row = [False, features, classification]
             data.append(new_row)
         
@@ -171,7 +196,7 @@ def load_dataset(path, classifications, target_per_class=500):
                     aug_type = np.random.choice(augmentation_techniques)
                     augmented_img = augment_image(img, aug_type)
                     
-                    features = extract_combined_features(augmented_img)
+                    features = extract_pure_cnn_features(augmented_img)
                     new_row = [True, features, classification]
                     data.append(new_row)
                     augmented_count += 1
@@ -277,29 +302,64 @@ def extract_hog_features(image, resize_dim=(256, 256), pixels_per_cell=(16, 16),
     
     return features
 
+def extract_cnn_features(image):
+    """
+    Extract deep learning features using pre-trained CNN (MobileNetV2).
+    The CNN automatically learns hierarchical features:
+    - Low level: edges, textures, colors
+    - Mid level: shapes, patterns
+    - High level: object parts, complex structures
+    """
+    model = get_cnn_feature_extractor()
+    
+    # Resize to MobileNetV2 input size (224x224)
+    img_resized = cv2.resize(image, (224, 224))
+    
+    # Convert BGR (OpenCV) to RGB (Keras)
+    img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+    
+    # Add batch dimension: (224, 224, 3) -> (1, 224, 224, 3)
+    img_array = np.expand_dims(img_rgb, axis=0)
+    
+    # Preprocess for MobileNetV2 (normalize to [-1, 1])
+    img_preprocessed = preprocess_input(img_array)
+    
+    # Extract features (output shape: (1, 1280))
+    features = model.predict(img_preprocessed, verbose=0)
+    
+    # Flatten to 1D array
+    return features.flatten()
+
 def extract_combined_features(image):
     """
-    Extract and combine multiple feature types for robust classification:
-    - HOG features (shape and gradient information)
-    - Color histogram features (color distribution)
-    - LBP features (texture information)
-    - Edge features (structural information)
-    """
-    # Resize image to standard size for consistency
-    image_resized = cv2.resize(image, (256, 256))
+    Extract hybrid features combining CNN deep learning with traditional features:
+    - CNN features: 1280 deep learned features from MobileNetV2
+    - Color histogram: 96 features (HSV color distribution)
+    - Edge features: 5 features (structural information)
     
-    # Extract different feature types
-    hog_features = extract_hog_features(image_resized)
+    Total: 1381 features
+    """
+    # Primary features: CNN deep learning
+    cnn_features = extract_cnn_features(image)
+    
+    # Complementary traditional features
+    image_resized = cv2.resize(image, (256, 256))
     color_features = extract_color_histogram(image_resized, bins=32)
-    lbp_features = extract_lbp_features(image_resized, radius=3, n_points=24)
     edge_features = extract_edge_features(image_resized)
     
-    # Combine all features into a single feature vector
+    # Combine all features
     combined_features = np.concatenate([
-        hog_features,      # Shape and gradient information
-        color_features,    # Color distribution
-        lbp_features,      # Texture information
-        edge_features      # Edge density information
+        cnn_features,      # Deep learned features (1280)
+        color_features,    # Color distribution (96)
+        edge_features      # Edge information (5)
     ])
     
     return combined_features
+
+def extract_pure_cnn_features(image):
+    """
+    Extract ONLY CNN features (1280 features).
+    Use this for a pure deep learning approach.
+    Faster and simpler than combined features.
+    """
+    return extract_cnn_features(image)

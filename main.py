@@ -1,5 +1,4 @@
-from image_loader2 import load_dataset, feature_extraction, extract_combined_features
-from image_loader2 import extract_pure_cnn_features
+from image_loader import load_dataset, feature_extraction, extract_combined_features, extract_pure_cnn_features
 import pandas as pd
 import numpy as np
 from sklearn.svm import SVC
@@ -45,54 +44,73 @@ print(f"Test set size: {len(X_test)}")
 
 ## Create the models with hyperparameter tuning
 print("\nPerforming hyperparameter tuning...")
-param_grid = {
+
+# SVM hyperparameter grid
+svm_param_grid = {
     'C': [0.1, 1, 10, 100],
     'gamma': ['scale', 'auto', 0.001, 0.01, 0.1],
     'kernel': ['rbf', 'poly']
 }
 
-svm_model = GridSearchCV(SVC(probability=True, random_state=42, class_weight='balanced'),
-                            param_grid, cv=2, scoring='accuracy', n_jobs=-1, verbose=2)
+svm_model = GridSearchCV(SVC(probability=True, random_state=42, class_weight='balanced'), 
+                            svm_param_grid, cv=2, scoring='accuracy', n_jobs=-1, verbose=2)
 
-# knn_model = KNeighborsClassifier()
-## Use cross validation on the current model and data (multiple ways)
+# KNN hyperparameter grid
+knn_param_grid = {
+    'n_neighbors': [3, 5, 7, 9, 11, 15],
+    'weights': ['uniform', 'distance'],
+    'metric': ['euclidean', 'manhattan', 'minkowski'],
+    'p': [1, 2]
+}
 
-# svm_cv_scores = cross_val_score(svm_model, X, y, cv=5)
-# knn_cv_scores = cross_val_score(knn_model, X, y, cv=5)
-# print(svm_cv_scores)
-# print(knn_cv_scores)
+knn_model = GridSearchCV(KNeighborsClassifier(), 
+                           knn_param_grid, cv=2, scoring='accuracy', n_jobs=-1, verbose=2)
 
 ## Fit the model
 
+print("\n=== Training SVM Model ===")
 svm_model.fit(X_train_scaled, y_train)
 print(f"\nBest parameters: {svm_model.best_params_}")
 print(f"Best cross-validation score: {svm_model.best_score_:.4f}")
 
-# knn_model.fit(X_train, y_train)
+print("\n=== Training KNN Model ===")
+knn_model.fit(X_train_scaled, y_train)
+print(f"\nBest parameters: {knn_model.best_params_}")
+print(f"Best cross-validation score: {knn_model.best_score_:.4f}")
 
 ## Test the models and check it's accuracy
 
 svm_pred, svm_pred_probability = predict_with_unknown(svm_model, X_test_scaled, 0.6)
-# knn_pred = knn_model.predict(X_test)
+knn_pred, knn_pred_probability = predict_with_unknown(knn_model, X_test_scaled, 0.6)
+
+print("\n=== SVM Predictions ===")
 print(svm_pred_probability)
 results = pd.DataFrame()
 results["real"] = le.inverse_transform(y_test)
 results["svm_predictions"] = le.inverse_transform(svm_pred)
-# results["knn_pred"] = le.inverse_transform(knn_pred)
+results["knn_predictions"] = le.inverse_transform(knn_pred)
 print(results)
 
 svm_accuracy = accuracy_score(y_test, svm_pred)
-# knn_accuracy = accuracy_score(y_test, knn_pred)
+knn_accuracy = accuracy_score(y_test, knn_pred)
 
 # Print accuracy of both models
+print("\n=== SVM Results ===")
 print(f"SVM Accuracy: {svm_accuracy * 100:.2f}%")
 print("\nClassification Report:")
 print(classification_report(y_test, svm_pred, target_names=le.inverse_transform(range(len(classifications)))))
 print("\nConfusion Matrix:")
 print(confusion_matrix(y_test, svm_pred))
 
-# print(f"KNN Accuracy: {knn_accuracy * 100:.2f}%")
+print("\n=== KNN Results ===")
+print(f"KNN Accuracy: {knn_accuracy * 100:.2f}%")
+print("\nClassification Report:")
+print(classification_report(y_test, knn_pred, target_names=le.inverse_transform(range(len(classifications)))))
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, knn_pred))
+
 ## Save the best models as a file
 joblib.dump(svm_model, "saved_svm_model.joblib")
+joblib.dump(knn_model, "saved_knn_model.joblib")
 joblib.dump(scaler, "saved_scaler.joblib")
 
