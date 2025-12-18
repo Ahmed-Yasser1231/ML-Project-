@@ -1,10 +1,10 @@
-from image_loader import load_dataset, feature_extraction, extract_combined_features, extract_pure_cnn_features
+from image_loader import load_dataset
 import pandas as pd
 import numpy as np
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import joblib
 # load images into a data, ensure augementation is only in training data

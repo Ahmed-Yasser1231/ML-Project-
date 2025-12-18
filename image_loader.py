@@ -2,7 +2,7 @@ import cv2
 import pandas as pd
 import os
 import numpy as np
-from skimage.feature import hog, local_binary_pattern
+from skimage.feature import hog
 from skimage import color
 import tensorflow as tf
 from tensorflow.keras.applications import MobileNetV2
@@ -223,60 +223,6 @@ def feature_extraction(image):
     features = features / 255
     return features
 
-def extract_color_histogram(image, bins=32):
-    """Extract color histogram features from HSV color space"""
-    # Convert to HSV for better color representation
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    
-    # Calculate histogram for each channel
-    hist_h = cv2.calcHist([hsv], [0], None, [bins], [0, 180])
-    hist_s = cv2.calcHist([hsv], [1], None, [bins], [0, 256])
-    hist_v = cv2.calcHist([hsv], [2], None, [bins], [0, 256])
-    
-    # Normalize histograms
-    hist_h = cv2.normalize(hist_h, hist_h).flatten()
-    hist_s = cv2.normalize(hist_s, hist_s).flatten()
-    hist_v = cv2.normalize(hist_v, hist_v).flatten()
-    
-    return np.concatenate([hist_h, hist_s, hist_v])
-
-def extract_lbp_features(image, radius=3, n_points=24):
-    """Extract Local Binary Pattern texture features"""
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Apply LBP
-    lbp = local_binary_pattern(gray, n_points, radius, method='uniform')
-    
-    # Calculate histogram of LBP
-    n_bins = n_points + 2
-    hist, _ = np.histogram(lbp.ravel(), bins=n_bins, range=(0, n_bins), density=True)
-    
-    return hist
-
-def extract_edge_features(image):
-    """Extract edge density features using Canny edge detection"""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Apply Canny edge detection
-    edges = cv2.Canny(gray, 50, 150)
-    
-    # Calculate edge density (percentage of edge pixels)
-    edge_density = np.sum(edges > 0) / edges.size
-    
-    # Divide image into 4 quadrants and calculate edge density for each
-    h, w = edges.shape
-    quadrants = [
-        edges[0:h//2, 0:w//2],
-        edges[0:h//2, w//2:w],
-        edges[h//2:h, 0:w//2],
-        edges[h//2:h, w//2:w]
-    ]
-    
-    quadrant_densities = [np.sum(q > 0) / q.size for q in quadrants]
-    
-    return np.array([edge_density] + quadrant_densities)
-
 def extract_hog_features(image, resize_dim=(256, 256), pixels_per_cell=(16, 16), cells_per_block=(2, 2), orientations=12):
     """Extract HOG features with optimized parameters"""
     # Step 1: Resize the image
@@ -329,32 +275,6 @@ def extract_cnn_features(image):
     
     # Flatten to 1D array
     return features.flatten()
-
-def extract_combined_features(image):
-    """
-    Extract hybrid features combining CNN deep learning with traditional features:
-    - CNN features: 1280 deep learned features from MobileNetV2
-    - Color histogram: 96 features (HSV color distribution)
-    - Edge features: 5 features (structural information)
-    
-    Total: 1381 features
-    """
-    # Primary features: CNN deep learning
-    cnn_features = extract_cnn_features(image)
-    
-    # Complementary traditional features
-    image_resized = cv2.resize(image, (256, 256))
-    color_features = extract_color_histogram(image_resized, bins=32)
-    edge_features = extract_edge_features(image_resized)
-    
-    # Combine all features
-    combined_features = np.concatenate([
-        cnn_features,      # Deep learned features (1280)
-        color_features,    # Color distribution (96)
-        edge_features      # Edge information (5)
-    ])
-    
-    return combined_features
 
 def extract_pure_cnn_features(image):
     """

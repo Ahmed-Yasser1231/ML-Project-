@@ -1,7 +1,6 @@
 import cv2
 import joblib
 from sklearn.preprocessing import LabelEncoder
-from image_loader import load_dataset, feature_extraction, extract_hog_features, extract_combined_features
 from image_loader import extract_pure_cnn_features
 import numpy as np
 
